@@ -1591,7 +1591,7 @@ mod tests {
 
     #[test]
     fn captura_para_inspecao() {
-        if let Ok(p) = std::env::var("RG52_PAD_DUMP") {
+        if let Ok(p) = std::env::var("CONTROLLER_TEST_DUMP") {
             let mut r = Renderer::new(1280, 720);
             r.draw(&State::demo(), 0.0, &Config::default());
             r.frame().write_ppm(std::path::Path::new(&p)).unwrap();

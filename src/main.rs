@@ -1,4 +1,4 @@
-//! rg52-pad ("Controller Test"): mostra em tempo real tudo o que o controle envia.
+//! controller-test ("Controller Test"): mostra em tempo real tudo o que o controle envia.
 //!
 //! Cada controle e aberto de dois jeitos: como controle com nome (A, B, START, HOME...
 //! pelo mapeamento do SDL) e como joystick cru. Eventos nomeados desenham o controle;
@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rg52pad::{
+use controller_test::{
     devices::{self, Detected},
     pad::{
         key_as_button, parse_exit, parse_map, parse_mapping, Axis, Binds, Btn, ExitKey, Input,
@@ -31,9 +31,9 @@ use sdl2::{
 };
 
 const HELP: &str = "\
-rg52-pad - Controller Test: mostra na tela o que cada botao, gatilho e analogico envia
+controller-test - Controller Test: mostra na tela o que cada botao, gatilho e analogico envia
 
-USO: rg52-pad [opcoes]
+USO: controller-test [opcoes]
   --fullscreen      tela cheia (use no aparelho)
   --device ID       auto (padrao), rg52mini, rg43, r36s, rgb10, a10mini, rk3566 ou generic
   --exit COMBO      combinacao para sair, segurada por 1 s (padrao: a do aparelho).
@@ -521,7 +521,7 @@ fn run(args: Args) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rg52pad::pad::Kind;
+    use controller_test::pad::Kind;
 
     /// Ponta a ponta com um joystick virtual do SDL: mapeamento real, eventos reais.
     #[test]

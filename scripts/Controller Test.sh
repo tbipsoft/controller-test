@@ -1,15 +1,15 @@
 #!/bin/bash
 #
-# Controller Test -- launcher do menu "Tools" do dArkOS para o app rg52-pad.
+# Controller Test -- launcher do menu "Tools" do dArkOS para o app controller-test.
 # Mostra na tela o desenho do controle e o log de tudo que botoes, gatilhos e analogicos
 # enviam. O aparelho e detectado sozinho. PARA SAIR: segure por 1 segundo a combinacao
 # mostrada no rodape (START + HOME no RG52, RG43 e RK3566; START + SELECT nos demais).
 #
 # O app so le os controles (nao precisa de root). Onde colocar: este .sh na pasta dos
-# scripts do menu Tools e o binario `rg52-pad` numa destas opcoes:
-#   <pasta deste script>/rg52-pad/rg52-pad   (pasta "rg52-pad" ao lado do .sh)
-#   <pasta deste script>/rg52-pad            (binario ao lado do .sh)
-#   /opt/rg52-pad/rg52-pad
+# scripts do menu Tools e o binario `controller-test` numa destas opcoes:
+#   <pasta deste script>/controller-test/controller-test   (pasta "controller-test" ao lado do .sh)
+#   <pasta deste script>/controller-test            (binario ao lado do .sh)
+#   /opt/controller-test/controller-test
 # Variaveis opcionais:
 #   DEVICE_PROFILE=r36s       forca o perfil (rg52mini, rg43, r36s, rgb10, a10mini, rk3566, generic)
 #   EXIT_COMBO=start+select   outra combinacao de saida (aceita botoes crus: start+b12)
@@ -17,9 +17,9 @@
 #   LAYOUT=xbox               posicao dos botoes de face (nintendo e o padrao)
 #   ACCENT=teal               cor de destaque (amber, teal, violet, coral ou #RRGGBB)
 
-APP=rg52-pad
-LOG=/tmp/rg52-pad.log
-RUN=/tmp/rg52-pad.run
+APP=controller-test
+LOG=/tmp/controller-test.log
+RUN=/tmp/controller-test.run
 TTY=${TTY:-/dev/tty1}
 
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -43,7 +43,7 @@ sudo chmod 666 "$TTY" 2>/dev/null
 printf '\033c\e[?25l' > "$TTY" 2>/dev/null
 
 BIN=$(find_bin) || {
-  say "rg52-pad nao encontrado.
+  say "controller-test nao encontrado.
 
 Coloque o binario em uma destas opcoes:
   $HERE/$APP/$APP
@@ -82,7 +82,7 @@ env \
 STATUS=$?
 
 if [ "$STATUS" -ne 0 ]; then
-  say "rg52-pad terminou com erro ($STATUS).
+  say "controller-test terminou com erro ($STATUS).
 
 $(tail -n 12 "$LOG" 2>/dev/null)
 

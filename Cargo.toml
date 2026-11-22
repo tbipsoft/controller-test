@@ -1,5 +1,5 @@
 [package]
-name = "rg52-pad"
+name = "controller-test"
 version = "1.0.0-alpha"
 edition = "2021"
 rust-version = "1.80"
@@ -7,11 +7,11 @@ description = "Controller Test: mostra na tela, em tempo real, cada botao, gatil
 license = "MIT"
 
 [lib]
-name = "rg52pad"
+name = "controller_test"
 path = "src/lib.rs"
 
 [[bin]]
-name = "rg52-pad"
+name = "controller-test"
 path = "src/main.rs"
 required-features = ["ui"]
 
