@@ -16,6 +16,7 @@ use std::{
 };
 
 use rg52pad::{
+    devices::{self, Detected},
     pad::{
         key_as_button, parse_exit, parse_map, parse_mapping, Axis, Binds, Btn, ExitKey, Input,
         State,
@@ -34,30 +35,43 @@ rg52-pad - Controller Test: mostra na tela o que cada botao, gatilho e analogico
 
 USO: rg52-pad [opcoes]
   --fullscreen      tela cheia (use no aparelho)
-  --exit COMBO      combinacao para sair, segurada por 1 s (padrao start+home).
+  --device ID       auto (padrao), rg52mini, rg43, r36s, rgb10, a10mini, rk3566 ou generic
+  --exit COMBO      combinacao para sair, segurada por 1 s (padrao: a do aparelho).
                     Aceita nomes (start, select, home, l1...) e botoes crus (b12)
   --layout L        posicao dos botoes de face: nintendo (padrao) ou xbox
   --accent COR      amber (padrao), teal, violet, coral ou #RRGGBB
   --map LISTA       atribui botoes crus ao desenho, ex.: back=b13,home=b12
                     (os botoes sem nome no SDL aparecem no log como bN)
   --list            lista os controles detectados (nome, GUID, mapeamento) e sai
-  --screenshot PPM  (depuracao) desenha um quadro de exemplo 1280x720 sem janela e sai
+  --screenshot PPM  (depuracao) desenha um quadro de exemplo sem janela e sai
+  --size LxA        tamanho do --screenshot (padrao 1280x720)
   -h, --help        esta ajuda
 ";
 
 struct Args {
     fullscreen: bool,
-    exit: Vec<ExitKey>,
+    device: Option<String>,
+    exit: Option<Vec<ExitKey>>,
     cfg: Config,
     list: bool,
     map: Vec<(u8, Btn)>,
     screenshot: Option<PathBuf>,
+    size: (usize, usize),
+}
+
+fn parse_size(s: &str) -> Result<(usize, usize), String> {
+    s.split_once('x')
+        .and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
+        .filter(|&(w, h): &(usize, usize)| w > 0 && h > 0)
+        .ok_or_else(|| format!("--size invalido: {s:?} (use LxA, ex.: 640x480)"))
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut a = Args {
         fullscreen: false,
-        exit: parse_exit("start+home")?,
+        device: None,
+        exit: None,
+        size: (1280, 720),
         cfg: Config {
             accent: ACCENT,
             layout: Layout::Nintendo,
@@ -71,7 +85,9 @@ fn parse_args() -> Result<Args, String> {
         let mut val = |n: &str| it.next().ok_or_else(|| format!("{n} precisa de um valor"));
         match arg.as_str() {
             "--fullscreen" => a.fullscreen = true,
-            "--exit" => a.exit = parse_exit(&val("--exit")?)?,
+            "--device" => a.device = Some(val("--device")?),
+            "--size" => a.size = parse_size(&val("--size")?)?,
+            "--exit" => a.exit = Some(parse_exit(&val("--exit")?)?),
             "--layout" => a.cfg.layout = parse_layout(&val("--layout")?)?,
             "--accent" => a.cfg.accent = parse_accent(&val("--accent")?)?,
             "--list" => a.list = true,
@@ -326,7 +342,13 @@ fn open_dev(
     Some((name, info))
 }
 
-fn list(sdl: &sdl2::Sdl) -> Result<(), String> {
+fn list(sdl: &sdl2::Sdl, detected: &Detected) -> Result<(), String> {
+    println!(
+        "aparelho: {} [{}], detectado por {}",
+        detected.profile.name,
+        detected.profile.id,
+        detected.source.label()
+    );
     let js = sdl.joystick()?;
     let gcs = sdl.game_controller()?;
     let n = js.num_joysticks()?;
@@ -347,9 +369,22 @@ fn list(sdl: &sdl2::Sdl) -> Result<(), String> {
 }
 
 fn run(args: Args) -> Result<(), String> {
+    let detected = devices::resolve(args.device.as_deref())?;
+    let profile = detected.profile;
+    let exit = match &args.exit {
+        Some(e) => e.clone(),
+        None => parse_exit(profile.exit)?,
+    };
+    // a atribuicao manual (--map) vem primeiro e tem prioridade sobre a do aparelho
+    let raw_map: Vec<(u8, Btn)> = args.map.iter().chain(profile.raw_map).copied().collect();
+
     if let Some(path) = &args.screenshot {
-        let mut r = Renderer::new(1280, 720);
-        r.draw(&State::demo(), 0.0, &args.cfg)
+        let (sw, sh) = args.size;
+        let mut demo = State::demo();
+        demo.controls = profile.controls();
+        demo.exit_combo = exit;
+        let mut r = Renderer::with_profile(sw, sh, profile);
+        r.draw(&demo, 0.0, &args.cfg)
             .write_ppm(path)
             .map_err(|e| e.to_string())?;
         return Ok(());
@@ -359,13 +394,13 @@ fn run(args: Args) -> Result<(), String> {
     sdl2::hint::set("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
     let sdl = sdl2::init()?;
     if args.list {
-        return list(&sdl);
+        return list(&sdl, &detected);
     }
     let video = sdl.video()?;
     let js = sdl.joystick()?;
     let gcs = sdl.game_controller()?;
 
-    let mut wb = video.window("RG52 Controller Test", 960, 540);
+    let mut wb = video.window(&format!("{} Controller Test", profile.title), 960, 540);
     wb.position_centered().resizable();
     if args.fullscreen {
         wb.fullscreen_desktop();
@@ -387,12 +422,12 @@ fn run(args: Args) -> Result<(), String> {
     let tc = canvas.texture_creator();
     let mut pump = sdl.event_pump()?;
     let (mut w, mut h) = canvas.output_size()?;
-    let mut rend = Renderer::new(w as usize, h as usize);
+    let mut rend = Renderer::with_profile(w as usize, h as usize, profile);
     let mut tex = tc
         .create_texture_streaming(PixelFormatEnum::ARGB8888, w, h)
         .map_err(|e| e.to_string())?;
 
-    let mut state = State::new(args.exit.clone());
+    let mut state = State::with_controls(exit, profile.controls());
     let mut devs: HashMap<u32, Dev> = HashMap::new();
     let start = Instant::now();
     let now = || start.elapsed().as_secs_f64();
@@ -448,7 +483,7 @@ fn run(args: Args) -> Result<(), String> {
                     ..
                 } => force = true,
                 other => {
-                    if let Some(input) = translate(&devs, &args.map, other) {
+                    if let Some(input) = translate(&devs, &raw_map, other) {
                         state.apply(now(), input);
                     }
                 }

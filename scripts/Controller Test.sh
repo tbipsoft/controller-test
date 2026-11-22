@@ -2,7 +2,8 @@
 #
 # Controller Test -- launcher do menu "Tools" do dArkOS para o app rg52-pad.
 # Mostra na tela o desenho do controle e o log de tudo que botoes, gatilhos e analogicos
-# enviam. PARA SAIR: segure START + HOME por 1 segundo.
+# enviam. O aparelho e detectado sozinho. PARA SAIR: segure por 1 segundo a combinacao
+# mostrada no rodape (START + HOME no RG52, RG43 e RK3566; START + SELECT nos demais).
 #
 # O app so le os controles (nao precisa de root). Onde colocar: este .sh na pasta dos
 # scripts do menu Tools e o binario `rg52-pad` numa destas opcoes:
@@ -10,6 +11,7 @@
 #   <pasta deste script>/rg52-pad            (binario ao lado do .sh)
 #   /opt/rg52-pad/rg52-pad
 # Variaveis opcionais:
+#   DEVICE_PROFILE=r36s       forca o perfil (rg52mini, rg43, r36s, rgb10, a10mini, rk3566, generic)
 #   EXIT_COMBO=start+select   outra combinacao de saida (aceita botoes crus: start+b12)
 #   MAP=back=b13,home=b12     atribui botoes crus (sem nome no SDL) ao desenho
 #   LAYOUT=xbox               posicao dos botoes de face (nintendo e o padrao)
@@ -66,6 +68,7 @@ export SDL_GAMECONTROLLERCONFIG_FILE="/opt/inttools/gamecontrollerdb.txt"
 export XDG_RUNTIME_DIR="/run/user/$UID/"
 
 ARGS=(--fullscreen)
+[ -n "$DEVICE_PROFILE" ] && ARGS+=(--device "$DEVICE_PROFILE")
 [ -n "$EXIT_COMBO" ] && ARGS+=(--exit "$EXIT_COMBO")
 [ -n "$MAP" ] && ARGS+=(--map "$MAP")
 [ -n "$LAYOUT" ] && ARGS+=(--layout "$LAYOUT")

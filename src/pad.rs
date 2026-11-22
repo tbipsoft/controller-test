@@ -74,6 +74,43 @@ impl Btn {
     }
 }
 
+/// Quais controles existem no aparelho: so eles aparecem na tela e contam no progresso.
+/// Um evento de controle ausente continua indo para o log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Controls {
+    pub buttons: [bool; NB],
+    pub sticks: [bool; 2],
+    pub triggers: bool,
+    /// Botao mostrado com outro nome (ex.: `R3` do RGB10 = "F").
+    pub alias: Option<(Btn, &'static str)>,
+}
+
+impl Controls {
+    pub const ALL: Controls = Controls {
+        buttons: [true; NB],
+        sticks: [true; 2],
+        triggers: true,
+        alias: None,
+    };
+
+    pub fn has(&self, b: Btn) -> bool {
+        self.buttons[b.idx()]
+    }
+
+    pub fn label(&self, b: Btn) -> &'static str {
+        match self.alias {
+            Some((btn, name)) if btn == b => name,
+            _ => b.label(),
+        }
+    }
+
+    pub fn total(&self) -> usize {
+        self.buttons.iter().filter(|b| **b).count()
+            + self.sticks.iter().filter(|s| **s).count() * DIRS
+            + if self.triggers { 2 } else { 0 }
+    }
+}
+
 /// Eixos: dois analogicos (X/Y) e os dois gatilhos analogicos.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {
@@ -297,6 +334,7 @@ pub struct State {
     pub devices: Vec<(String, String)>,
     pub events: u64,
     pub exit_combo: Vec<ExitKey>,
+    pub controls: Controls,
     raw_down: BTreeSet<u8>,
     esc_down: bool,
     hold_since: Option<f64>,
@@ -308,7 +346,12 @@ pub struct State {
 
 impl State {
     pub fn new(exit_combo: Vec<ExitKey>) -> State {
+        State::with_controls(exit_combo, Controls::ALL)
+    }
+
+    pub fn with_controls(exit_combo: Vec<ExitKey>, controls: Controls) -> State {
         State {
+            controls,
             pressed: [false; NB],
             tested: [false; NB],
             stick: [(0.0, 0.0); 2],
@@ -334,13 +377,27 @@ impl State {
         }
     }
 
-    /// Quantos itens existem para testar: 16 botoes + 4 direcoes x 2 analogicos + 2 gatilhos.
+    /// Maximo de itens: 16 botoes + 4 direcoes x 2 analogicos + 2 gatilhos.
     pub const TOTAL: usize = NB + 2 * DIRS + 2;
 
+    /// Itens a testar neste aparelho.
+    pub fn total(&self) -> usize {
+        self.controls.total()
+    }
+
     pub fn tested_count(&self) -> usize {
-        self.tested.iter().filter(|t| **t).count()
-            + self.dirs.iter().flatten().filter(|t| **t).count()
-            + self.trig_tested.iter().filter(|t| **t).count()
+        let c = &self.controls;
+        let buttons = (0..NB).filter(|&i| c.buttons[i] && self.tested[i]).count();
+        let dirs = (0..2)
+            .filter(|&s| c.sticks[s])
+            .map(|s| self.dirs[s].iter().filter(|t| **t).count())
+            .sum::<usize>();
+        let trig = if c.triggers {
+            self.trig_tested.iter().filter(|t| **t).count()
+        } else {
+            0
+        };
+        buttons + dirs + trig
     }
 
     pub fn is_pressed(&self, b: Btn) -> bool {
@@ -426,7 +483,8 @@ impl State {
                 }
                 let act = if down { "DOWN" } else { "UP" };
                 let kind = if down { Kind::Down } else { Kind::Up };
-                self.push(now, kind, btn.label(), act, raw.as_deref().unwrap_or(""));
+                let label = self.controls.label(btn);
+                self.push(now, kind, label, act, raw.as_deref().unwrap_or(""));
             }
             Input::Axis { axis, value, raw } => {
                 let detail = raw.unwrap_or_default();
@@ -987,6 +1045,30 @@ dpup:h0.1,dpleft:h0.8,leftx:a0,lefty:a1~,lefttrigger:+a4,righttrigger:a5,platfor
         assert_eq!(s.log.len(), 1);
         s.apply(0.4, raw(0));
         assert_eq!(s.log.back().unwrap().act, "+0.00");
+    }
+
+    #[test]
+    fn progresso_conta_so_o_que_o_aparelho_tem() {
+        let mut buttons = [false; NB];
+        buttons[Btn::A.idx()] = true;
+        buttons[Btn::R3.idx()] = true;
+        let c = Controls {
+            buttons,
+            sticks: [true, false],
+            triggers: false,
+            alias: Some((Btn::R3, "F")),
+        };
+        let mut s = State::with_controls(vec![], c);
+        assert_eq!(s.total(), 6);
+        press(&mut s, 0.0, Btn::A, true);
+        press(&mut s, 0.1, Btn::B, true); // nao existe: vai ao log, mas nao conta
+        axis(&mut s, 0.2, Axis::RX, 32767); // analogico ausente
+        axis(&mut s, 0.3, Axis::L2, 32767); // gatilho ausente
+        axis(&mut s, 0.4, Axis::LX, 32767);
+        assert_eq!(s.tested_count(), 2);
+        assert!(s.log.iter().any(|l| l.name == "B"));
+        press(&mut s, 0.5, Btn::R3, true);
+        assert_eq!(s.log.back().unwrap().name, "F");
     }
 
     #[test]
